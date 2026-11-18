@@ -1,0 +1,26 @@
+# CCE 集群自动伸缩说明
+#
+# CCE 不需要自行部署 cluster-autoscaler Deployment：
+# 控制台路径: CCE 集群 -> 伸缩 -> 节点伸缩，启用「集群自动伸缩」插件，
+# 配置 min/max 节点数与扩缩容策略即可（等效本文件原有 min:2 / max:10 配置）。
+#
+# 工作负载维度按需伸缩使用 HPA:
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: demo-app-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: demo-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

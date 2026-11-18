@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault-cli
+  labels:
+    name: vault-cli
+spec:
+  containers:
+    - image: hashicorp/vault:1.15
+      command:
+        - "sleep"
+        - "9999999"
+      env:
+        - name: VAULT_ADDR
+          value: "http://<public-ip-address>:8200"
+      name: vault-cli

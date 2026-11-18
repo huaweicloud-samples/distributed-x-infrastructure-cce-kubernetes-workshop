@@ -1,0 +1,15 @@
+name: sample
+version: 1.0.0
+description: My first Helm chart
+keywords:
+  - java
+  - javaee
+  - mysql
+  - wildfly
+  - wildfly swarm
+home: https://kubernetes.io/docs/topics/helm
+sources:
+  - https://kubernetes.io/docs/topics/helm
+maintainers:
+  - name: Arun Gupta
+    email: arun.gupta@gmail.com

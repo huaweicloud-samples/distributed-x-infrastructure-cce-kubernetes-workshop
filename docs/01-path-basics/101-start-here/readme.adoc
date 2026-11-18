@@ -1,0 +1,63 @@
+= 环境准备（华为云 CCE）
+
+本模块指导您准备 Kubernetes 实操环境。在华为云上，我们推荐直接使用 CCE 托管集群 + 本地或 CloudShell 命令行工具，
+无需单独搭建云端 IDE。
+
+== 前置工具安装
+
+在本地终端（或华为云 CloudShell）中确认以下工具可用：
+
+|===
+|工具 |用途 |安装方式
+
+|kubectl
+|Kubernetes 命令行
+|https://kubernetes.io/zh-cn/docs/tasks/tools/
+
+|华为云 CLI (oc)
+|管理 CCE / ECS / OBS 等资源
+|https://support.huaweicloud.com/cli/index.html
+
+|Helm
+|Kubernetes 包管理
+|https://helm.sh/docs/intro/install/
+
+|Docker
+|本地构建镜像
+|https://docs.docker.com/get-docker/
+|===
+
+== 配置华为云 CLI
+
+    $ oc configure
+    # 按提示输入 AK/SK（建议使用 IAM 子账号与最小权限委托）
+    $ oc config set-region cn-north-4
+
+[NOTE]
+====
+建议使用 IAM 子账号并遵循最小权限原则；不要将长期凭据写入任何文件或代码仓。
+====
+
+== 配置 kubectl 访问 CCE
+
+集群创建完成后（见 link:../102-your-first-cluster[下一个模块]），获取集群凭证：
+
+    $ oc cce cluster config my-cluster
+    $ kubectl get nodes
+
+== 镜像仓库（SWR）
+
+后续实验需要推送镜像时，使用华为云容器镜像服务 SWR：
+
+    $ docker login swr.cn-north-4.myhuaweicloud.com
+
+== Workshop 清理
+
+实验结束后请及时删除集群与资源，避免产生持续费用：
+
+    $ oc cce cluster delete my-cluster
+    $ kubectl delete -f <你的清单文件>
+
+== 下一步
+
+The next step is link:../102-your-first-cluster[to create a Kubernetes cluster].

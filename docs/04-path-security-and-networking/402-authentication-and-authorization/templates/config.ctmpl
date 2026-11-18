@@ -1,0 +1,4 @@
+{{ with secret "demo/data/creds" }}
+access_key = {{ .Data.data.access_key }}
+secret_key = {{ .Data.data.secret_key }}
+{{ end }}

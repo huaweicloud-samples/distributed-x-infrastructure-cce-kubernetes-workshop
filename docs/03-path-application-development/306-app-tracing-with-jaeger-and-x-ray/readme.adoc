@@ -1,0 +1,28 @@
+= Application tracing
+:toc:
+:icons:
+:linkcss:
+
+This section will explain how to perform distribute tracing on applications deployed on Kubernetes.
+
+We will cover the following tracing framework:
+
+* link:jaeger[Jaeger]
+
+[NOTE]
+====
+华为云 APM（应用性能管理）提供开箱即用的分布式追踪能力，可在 CCE 控制台直接接入，无需自行部署采集器；
+需要自建时推荐使用本模块的 Jaeger 方案（云中立，可直接运行于 CCE）。
+====
+
+Once you've explored link:jaeger[Jaeger], you are ready to continue on with the workshop!
+
+:frame: none
+:grid: none
+:valign: top
+
+[align="center", cols="1", grid="none", frame="none"]
+|=====
+|link:../03-path-application-development/306-app-management-with-helm[Continue]
+|link:../../README.md[Go to Developer Index]
+|=====
