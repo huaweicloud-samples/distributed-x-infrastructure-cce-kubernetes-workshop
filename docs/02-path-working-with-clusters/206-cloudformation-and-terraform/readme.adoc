@@ -1,0 +1,45 @@
+= 集群 IaC 部署（华为云 RFS / Terraform）
+
+本模块演示如何以基础设施即代码（IaC）方式创建 Kubernetes 集群。
+
+== 华为云方案
+
+华为云提供两种主流 IaC 途径：
+
+. **资源编排服务 RFS**：华为云原生编排服务，控制台或 CLI 一键创建集群栈。
+. **Terraform**：使用 `huaweicloud` provider（`huaweicloud_cce_cluster`），生态成熟，跨云一致。
+
+== Terraform 示例
+
+[source, hcl]
+----
+resource "huaweicloud_cce_cluster" "main" {
+  name                   = "k8s-workshop"
+  flavor_id              = "cce.s1.small"
+  cluster_version        = "v1.28"
+  cluster_type           = "VirtualMachine"
+  vpc_id                 = var.vpc_id
+  subnet_id              = var.subnet_id
+  container_network_type = "overlay_l2"
+}
+
+resource "huaweicloud_cce_node" "worker" {
+  cluster_id        = huaweicloud_cce_cluster.main.id
+  name              = "worker-1"
+  flavor_id         = "s7.large.2"
+  availability_zone = "cn-north-4a"
+  root_volume {
+    size       = 50
+    volumetype = "SAS"
+  }
+  data_volumes {
+    size       = 100
+    volumetype = "SAS"
+  }
+}
+----
+
+== 说明
+
+原 CloudFormation 样例与华为云 RFS 模板语法不通用，已移除；华为云推荐使用上述 RFS 或 Terraform 方式。
+Terraform 完整用法参考 https://registry.terraform.io/providers/huaweicloud/huaweicloud/latest/docs

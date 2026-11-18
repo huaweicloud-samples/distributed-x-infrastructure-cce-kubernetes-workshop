@@ -1,0 +1,15 @@
+= For Further Reading
+:toc:
+:icons:
+:linkcss:
+
+Congratulations! You have completed the Kubernetes the 华为云ome Way! workshop.
+We hope you have enjoyed learning more about Kubernetes on 华为云.
+
+Please remember to clean up any resources spun up during this workshop!
+
+You can find instructions for Workshop Cleanup in relevant Index pages
+
+== Further Reading
+
+* link:https://www.huaweicloud.com Elastic Container Service for Kubernetes (CCE)]

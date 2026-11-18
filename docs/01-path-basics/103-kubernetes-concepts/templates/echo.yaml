@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: echo-pod
+  template:
+    metadata:
+      labels:
+        app: echo-pod
+    spec:
+      containers:
+      - name: echoheaders
+
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080

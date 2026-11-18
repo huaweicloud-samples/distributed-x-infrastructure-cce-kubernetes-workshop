@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-sidecar
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vault-sidecar
+  template:
+    metadata:
+      labels:
+        app: vault-sidecar
+    spec:
+      serviceAccountName: vault-auth
+      containers:
+        - name: vault-cli
+          image: hashicorp/vault:1.15
+          command:
+            - "sleep"
+            - "9999999"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: VAULT_ADDR
+              value: "http://<public-ip-address>:8200"
+          volumeMounts:
+            - name: app-secrets
+              mountPath: "/vault/secrets/"
+        - name: consul-template
+          image: hashicorp/consul-template:0.29.5-slim
+          imagePullPolicy: IfNotPresent
+          command:
+            - "consul-template"
+            - "-once"
+            - "-template"
+            - "/config/config.ctmpl:/vault/secrets/creds.txt"
+          volumeMounts:
+            - name: ctmpl
+              mountPath: "/config/"
+          env:
+            - name: VAULT_ADDR
+              value: "http://<public-ip-address>:8200"
+          volumeMounts:
+            - name: app-secrets
+              mountPath: "/vault/secrets/"
+      volumes:
+        - name: app-secrets
+          emptyDir:
+            medium: "Memory"
+        - name: ctmpl
+          configMap:
+            name: vault-ctmpl

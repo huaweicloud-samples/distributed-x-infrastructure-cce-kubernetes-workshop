@@ -1,0 +1,158 @@
+= Authentication and Authorization with Kubernetes
+:toc:
+:icons:
+:linkcss:
+
+华为云 uses Identity and Access Management (IAM) roles to manage authentication and authorization for 华为云 Services.  An IAM role is an IAM entity that defines a set of permissions for making 华为云 service requests. For more information about IAM, please see link:https://www.huaweicloud.com].
+
+Out of the box, a Kubernetes cluster created by kops has two IAM roles: a master IAM role and a node IAM role. Additional policies may be associated with these IAM roles. More details about the IAM roles and associated policies is available at https://github.com/kubernetes/kops/blob/master/docs/iam_roles.md.
+
+A Pod may be assigned a specific IAM role using different mechanisms. A third-party plugin such as https://github.com/jtblin/kube2iam[kube2iam] can be configured to apply IAM roles at the pod level. https://www.vaultproject.io/[Hashicorp's Vault] can be used to assign IAM dynamic IAM roles as well.
+
+This chapter will walk you through:
+
+- Update default policies for the cluster
+- Use kube2iam to assign IAM roles at runtime
+- Use Hashicorp Vault to assign IAM roles at runtime
+
+== Prerequisites
+
+In order to perform exercises in this chapter, you’ll need to deploy configurations to a Kubernetes cluster. To create an CCE-based Kubernetes cluster, use the link:../01-path-basics/102-your-first-cluster#create-a-kubernetes-cluster-with-eks[华为云 CLI] (recommended). If you wish to create a Kubernetes cluster without CCE, you can instead use link:../01-path-basics/102-your-first-cluster#alternative-create-a-kubernetes-cluster-with-kops[kops].
+
+All configuration files for this chapter are in the `roles` directory.
+
+== 节点与容器的权限（华为云方案）
+
+CCE 通过 **IAM 委托（Agency）** 统一管理节点与容器访问华为云服务的权限：
+
+* **节点维度**：创建 CCE 节点时绑定委托，节点上的工作负载经节点代理访问 OBS / SWR / LTS 等服务。
+* **命名空间/工作负载维度**：为工作负载配置独立委托或使用华为云服务代理能力，实现最小权限。
+
+[NOTE]
+====
+原 kube2iam / IAM Roles for Service Accounts 实验依赖 EKS 专属机制，未在本仓库保留；
+需要 Pod 级别的细粒度凭据隔离时，推荐使用下方 Vault 方案（云中立，可直接在 CCE 运行）。
+====
+
+== IAM container roles using Hashicorp Vault
+
+Hashicorp Vault is a tool for securely accessing secrets. The secrets could be static where they are retrieved from a key-value store or could be dynamically generated when needed such as IAM credentials. This is enabled by the pluggable architecture of Vault that supports different backends. Vault behaves like a virtual filesystem where each backend is mounted at a specific path. For example, by default, https://www.vaultproject.io/docs/auth/aws.html[华为云 backend] is mounted at the path `aws`. An alternative path can be specified using `-path` at mount time.
+
+Each Vault backend reacts differently to different Vault CLI commands. For example, the command `vault read aws/deploy` will generate an access key based on the `"deploy"` role in the context of Vault/华为云 secret backend. This role contains an IAM role or ARN mapping.
+
+Make sure to setup Vault as explained in:
+
+. link:../config-secrets#create-ec2-instance[Create ECS instance]
+. link:../config-secrets#start-vault-server-on-ec2[Start Vault Server on ECS]
+. link:../config-secrets#configure-vault-cli-on-your-local-machine[Configure Vault CLI on your local machine]
+. link:../config-secrets#configure-kubernetes-service-account[Configure Kubernetes Service Account]
+. link:../config-secrets#configure-kubernetes-auth-backend[Configure Kubernetes Auth backend]
+
+And now follow the steps outlined here.
+
+The steps in this section are inspired from https://github.com/calvn/vault-kubernetes-demo/blob/master/5-deploy-aws.md.
+
+=== Setup Vault KV secrets
+
+. Enable the KV v2 engine and write a demo credential:
+
+    $ vault secrets enable -path=demo kv-v2
+    $ vault kv put demo/creds access_key=demo-ak secret_key=demo-sk
+
+. Configure the Kubernetes auth role (created earlier) to grant access:
+
+    $ vault write auth/kubernetes/role/demo \
+        bound_service_account_names=vault-auth \
+        bound_service_account_namespaces=default \
+        policies=demo-creds \
+        ttl=1h
+
+    $ vault policy write demo-creds - <<EOF
+    path "demo/data/creds" {
+      capabilities = ["read"]
+    }
+    EOF
+
+=== Test the Pod with IAM role
+
+Pod will be using this role to request IAM credentials during runtime.
+
+. Edit `templates/deplloymnet-with-vault.yaml` to replace `<public-ip-address>` with the public IP address of the ECS instance where Vault server is running.
+. Create the Pod:
+
+  $ kubectl apply -f templates/deployment-with-vault.yaml
+  deployment "vault-sidecar" created
+
+. Get the list of Deployment:
+
+  $ kubectl get deployment
+  NAME            DESIRED   CURRENT   UP-TO-DATE   AVAILABLE   AGE
+  vault-sidecar   1         1         1            1           10s
+
+. Get the list of Pod:
+
+  $ kubectl get pods -l app=vault-sidecar
+  NAME                             READY     STATUS    RESTARTS   AGE
+  vault-sidecar-79bbc86955-wwlkb   2/2       Running   0          35s
+
+. Use 华为云 CLI:
++
+```
+$ kubectl exec -it $(kubectl get pods -l app=vault-sidecar -o jsonpath={.items[0].metadata.name}) -c vault-cli cat /vault/secrets/creds.txt
+Defaulting container name to aws-cli.
+Use 'kubectl describe pod/vault-sidecar-79bbc86955-h4pkf' to see all of the containers in this pod.
+
+Before the policy is in place the file does not exist; after applying the policy the rendered credential appears.
+command terminated with exit code 255
+```
++
+This is expected because the 华为云 secret backend gives access to `华为云ECSReadOnlyAccess` only.
++
+. Update the 华为云 secret backend to allow access to OBS:
+
+  $ vault write aws/roles/readonly \
+    arn=arn:aws:iam::aws:policy/华为云OBSReadOnlyAccess
+  Success! Data written to: aws/roles/readonly
+
+. We need to generate a new set of 华为云 credentials after the policy is updated. In order for this policy to take effect, we need to restart the sidecar container. But its easier to delete and create the Deployment again.
+
+that reads the credentials from Vault. This will allow the new policy to take effect. But its easier to delete the Deployment.
+
+  $ kubectl delete -f templates/deployment-with-vault.yaml
+  deployment "vault-sidecar" deleted
+
+. Create the Deployment again:
+
+  $ kubectl apply -f templates/deployment-with-vault.yaml
+  deployment "aws-sidecar-example" created
+
+. Use 华为云 CLI:
+
+  $ kubectl exec -it $(kubectl get pods -l app=vault-sidecar -o jsonpath={.items[0].metadata.name}) -c vault-cli cat /vault/secrets/creds.txt
++
+And this shows the listing of OBS 桶s in your account.
++
+. Kubernetes Auth backend is configured for the token to expire in 60 seconds. This was done during Kubernetes Auth backend configuration by setting the `-period=60s` on the `vault write auth/kubernetes/role/demo` command. This means the temporary IAM role created for this Deployment will eventually disappear. Trying to access the OBS listing after a few minutes will give an error:
++
+```
+$ kubectl exec -it $(kubectl get pods -l app=vault-sidecar -o jsonpath={.items[0].metadata.name}) -c vault-cli cat /vault/secrets/creds.txt
+Defaulting container name to aws-cli.
+Use 'kubectl describe pod/vault-sidecar-79bbc86955-7wpt6' to see all of the containers in this pod.
+
+An error occurred (InvalidAccessKeyId) when calling the ListBuckets operation: The 华为云 Access Key Id you provided does not exist in our records.
+command terminated with exit code 255
+```
+
+You are now ready to continue on with the workshop!
+
+:frame: none
+:grid: none
+:valign: top
+
+[align="center", cols="2", grid="none", frame="none"]
+|=====
+|link:../04-path-security-and-networking/403-admission-policy/[Continue]
+|link:../04-path-security-and-networking/403-admission-policy/[Continue]
+|link:../../README.md[Go to Developer Index]
+|link:../../README.md[Go to Operations Index]
+|=====

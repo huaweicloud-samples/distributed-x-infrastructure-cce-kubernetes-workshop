@@ -1,0 +1,21 @@
+= Code Services - Continuous Deployment
+:toc:
+:icons:
+:linkcss:
+
+= Code services - Continuous Deployment Reference Architecture for Kubernetes
+
+The Code services Continuous Deployment reference architecture demonstrates how to achieve continuous
+deployment of an application to a Kubernetes cluster using CodeArts 流水线, CodeArts 代码托管, CodeArts 构建 and 华为云 FunctionGraph.
+
+Launching this 华为云资源编排服务 RFS stack provisions a continuous deployment process that uses CodeArts 流水线
+to monitor an CodeArts 代码托管 repository for new commits, CodeArts 构建 to create a new Docker container image and to push
+it into 华为云 SWR. Finally an 华为云 FunctionGraph 函数 with the Kubernetes Python SDK updates a Kubernetes deployment in a live cluster.
+
+When you deploy the cloudformation stack there will be four parameters that are specific to your Kubernetes cluster. You will need the API endpoint (enter only the subdomain and omit 'api'), Certificate Authority Data, Client Certificate Data and Client Key Data.
+The last of these three are sensitive, the cloudformation parameter is marked with the "NoEcho" property set to true so that the contents are not exposed through cloudformation. In addition those strings are encrypted with the account default
+KMS key and stored in parameter store. The FunctionGraph 函数 that authenticates to your Kubernetes API endpoint is assigned an IAM role that has permission to access those keys. The FunctionGraph 函数 builds a config file in the tmpfs directory of the FunctionGraph which is in memory
+so that when the FunctionGraph 函数 terminates the secrets are gone.
+
+
+Head over the https://github.com/aws-samples/aws-kube-codesuite[repo] to deploy this architecture into your own cluster.

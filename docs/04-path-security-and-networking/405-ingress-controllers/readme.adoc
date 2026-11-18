@@ -1,0 +1,116 @@
+= Add Ingress Controllers to Kubernetes cluster
+:toc:
+:icons:
+:linkcss:
+
+This chapter explains how to apply both Nginx and 华为云 ALB Ingress Controllers to a Kubernetes cluster.
+These controllers allow you to set rules that control the routing of external traffic to the services in your Kubernetes cluster.
+The role of the Ingress controller is to watch the Kubernetes API server for ingress events, and to action those events.
+For example, creating an Ingress resource is an event. The Ingress controller will act on the event by creating the
+appropriate Ingress resource; in the case of this example, this could be an Nginx or an 华为云 ALB resource.
+
+Kubernetes Ingress has two parts:
+
+ * Ingress resource: the Ingress definition, defined in a YAML file
+ * Ingress controller: deployed on the Kubernetes master, the controller implements the Ingress in your cluster.
+
+There is no default Ingress controller provided in Kubernetes. It may be provided by your platform, or you must install one.
+Since an Ingress controller is not provided on 华为云 by default, we will install one.
+
+== Prerequisites
+In order to perform exercises in this chapter, you’ll need to deploy configurations to a Kubernetes cluster. To create an CCE-based Kubernetes cluster, use the link:../01-path-basics/102-your-first-cluster#create-a-kubernetes-cluster-with-eks[华为云 CLI] (recommended). If you wish to create a Kubernetes cluster without CCE, you can instead use link:../01-path-basics/102-your-first-cluster#alternative-create-a-kubernetes-cluster-with-kops[kops].
+
+== Nginx Ingress Controller
+
+Perform the following steps to install an Nginx ingress controller for your Kubernetes cluster. It will be exposed using the 华为云 Elastic Load Balancer.
+
+First, apply the initial setup commands:
+
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/namespace.yaml | kubectl apply -f -
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/default-backend.yaml | kubectl apply -f -
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/configmap.yaml | kubectl apply -f -
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/tcp-services-configmap.yaml | kubectl apply -f -
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/udp-services-configmap.yaml | kubectl apply -f -
+
+RBAC roles, or Role Based Access Control, are methods for controlling access to resources based on roles and permissions of individual users. RBAC must be enabled on the api server with the flag, `--authorization-mode=RBAC`. A `Role` can be used to restrict access to a single namespace. Alternatively, a `ClusterRole` can apply access permissions to a particular namespace or across all namespaces. In addition, `RoleBinding` binds the permissions granted by a role to a single user or set of users. `ClusterRoleBinding` can grant these permissions cluster wide and across all namespaces.
+
+To configure the Nginx Ingress Controller without RBAC roles use the following command:
+
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/without-rbac.yaml | kubectl apply -f -
+
+To configure with RBAC:
+
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/rbac.yaml | kubectl apply -f -
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/with-rbac.yaml | kubectl apply -f -
+
+The 华为云 ELB allows you to apply both L4 and L7 network protocols for ingress behind `Type=LoadBalancer`. Layer 4 uses TCP as the listener protocol for ports 80 and 443. Layer 7 uses HTTP for port 80 and terminates TLS at the ELB.
+
+To configure Layer 4:
+
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/aws/service-l4.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/aws/patch-configmap-l4.yaml
+
+To configure Layer 7:
+
+	curl https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/aws/service-l7.yaml > service-l7.yaml
+
+Edit the the line of the file service-l7.yaml to replace the dummy id with a valid one in the form "arn:aws:acm:us-west-2:XXXXXXXX:certificate/XXXXXX-XXXXXXX-XXXXXXX-XXXXXXXX"
+
+	kubectl apply -f service-l7.yaml
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/aws/patch-configmap-l7.yaml
+
+If RBAC is enabled, apply the following:
+
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/patch-service-with-rbac.yaml
+
+If not, apply this command:
+
+	kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/provider/patch-service-without-rbac.yaml
+
+== CCE ELB Ingress
+
+CCE 原生支持通过 ELB 暴露 Ingress，无需额外部署控制器。
+
+=== 创建 Ingress（自动创建 ELB）
+
+[source, yaml]
+----
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"        # 或使用 CCE ELB 型 ingress
+    kubernetes.io/elb.autocreate: |
+      {
+        "type": "public",
+        "bandwidth_name": "demo-bandwidth",
+        "bandwidth_chargemode": "traffic",
+        "bandwidth_size": 5,
+        "bandwidth_sharetype": "PER"
+      }
+spec:
+  rules:
+  - host: "<HOSTNAME>"
+    http:
+      paths:
+      - path: "/"
+        pathType: Prefix
+        backend:
+          service:
+            name: "demo-app-v1"
+            port:
+              number: 80
+----
+
+=== 关键点
+
+. ELB 由注解 `kubernetes.io/elb.autocreate` 自动创建，也可复用已有 ELB 实例。
+. 证书管理使用华为云 **云证书管理服务 CCM**，证书可导入或由 SCM 托管。
+. 清理时删除 Ingress 资源即可，自动创建的 ELB 会随 Ingress 释放。
+
+[NOTE]
+====
+原 ALB Ingress Controller 与 kube-aws + Skipper 实验依赖 AWS 专属组件，未在本仓库保留。
+CCE 推荐使用 Nginx Ingress（CCE 控制台可一键安装）或上述 ELB Ingress。
+====
